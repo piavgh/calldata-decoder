@@ -1,0 +1,11 @@
+[package]
+name = "calldata-decoder"
+author = "DeGatchi (https://github.com/DeGatchi)"
+description = "A blockchain blackbox calldata decoder"
+version = "0.1.0"
+edition = "2021"
+keywords = ["ethereum", "web3", "decoder", "evm", "crypto", "calldata"]
+license = "MIT"
+
+[dependencies]
+ethers = "1.0.2"
