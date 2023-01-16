@@ -16,6 +16,7 @@ pub const MAX_U128: &str = "00000000000000000000000000000000ffffffffffffffffffff
 #[derive(Debug, Clone)]
 pub enum Types {
     AnyZero,
+    AnyMax,
     Uint,
     Int,
     Bytes,

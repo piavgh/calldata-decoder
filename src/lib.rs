@@ -5,6 +5,11 @@ use constants::*;
 use ethers::types::{U128, U256};
 use type_guesser::*;
 
+
+// ------------------------------------------------------------
+//  Helpers 
+// ------------------------------------------------------------
+
 /// Converts `calldata` into chunks of `size`.
 pub fn chunkify(calldata: &str, size: usize) -> Vec<String> {
     calldata
@@ -78,10 +83,10 @@ pub fn rearrange_chunks(
 /// 1. chunks - vector of bytes-32 (64 chars).
 /// 2. current - the chunks element we're currently on.
 pub fn last_raw(params: &Vec<String>, current: usize) -> Option<String> {
-    if current == 0 {
-        return None;
+    match current == 0 {
+        true => None,
+        false => Some(params[current - 1].clone())
     }
-    Some(params[current - 1].clone())
 }
 
 /// Returns the raw param after `current`, if available.
@@ -96,6 +101,72 @@ pub fn next_raw(params: &Vec<String>, current: usize) -> Option<String> {
         false => Some(params[len].clone()),
     }
 }
+
+/// Guesses the potential types of the parameter by checking specific patterns.
+/// 
+/// ## Params
+/// 1. param - 32 byte str representation of parameter. 
+/// 
+/// ## Returns
+/// 1. All potential types the parameter can be.
+pub fn guess_param_type(param: &str) -> ParamTypes {
+    // Quick check for maxed out types.
+    match param {
+        EMPTY_32 => return ParamTypes::new(vec![Types::AnyZero]),
+        MAX_U128 => return ParamTypes::new(vec![Types::MaxUint128]),
+        MAX_U256 => return ParamTypes::new(vec![Types::AnyMax]),
+        _ => {}
+    }
+
+    // Break param into 4 byte sections.
+    let chunks = chunkify(param, 8);
+
+    // Selector detection:
+    // if: !00000000... && !FFFFFFFF... && ________00000000
+    if chunks[0] != EMPTY_4 && chunks[0] != MASK_4 && chunks[1] == EMPTY_4 {
+        return ParamTypes::new(vec![Types::Selector, Types::String, Types::Bytes]);
+    }
+
+    // Check if it's an Int by: if FFFFFFFF
+    // Ints replace 0s with 1s in bitwise
+    if chunks[0] == MASK_4 {
+        // if: FFFFFFFFFFFFFFFF we can assume it's an Int
+        match chunks[1] == MASK_4 {
+            true => return ParamTypes::new(vec![Types::Int]),
+            false => return ParamTypes::new(vec![Types::Int, Types::String, Types::Bytes]),
+        }
+    }
+
+    // Check if we found an address:
+    // Todo:
+    // - Check for optimised addresses via heuristics
+    let trimmed = param.trim_start_matches('0').to_string();
+    if trimmed.len() == 40 {
+        return ParamTypes::new(vec![Types::Address, Types::Bytes20, Types::Uint]);
+    }
+
+    // If the value can be converted to U256
+    if let Ok(v) = U256::from_str_radix(&param, 16) {
+
+        // If value is 0 or 1.
+        if v <= U256::one() {
+            return ParamTypes::new(vec![Types::Uint8, Types::Bytes1, Types::Bool]);
+        } 
+
+        // If value is of type `uint8`.
+        if v <= U256::from_dec_str("8").unwrap() {
+            return ParamTypes::new(vec![Types::Uint8, Types::Bytes1]);
+        }
+    }
+
+    // Eliminated some patterns; now we can conclude it can be one of these.
+    ParamTypes::new(vec![Types::Uint, Types::Int, Types::Bytes])
+}
+
+
+// ------------------------------------------------------------
+//  Calldata 
+// ------------------------------------------------------------
 
 #[derive(Clone, Debug)]
 pub struct Calldata {
@@ -117,7 +188,7 @@ impl Calldata {
             parsed_params: vec![],
         };
         s.parse_selector();
-        s.parse_params();
+        s.parse_raw_params();
         s.guess_param_types();
         s
     }
@@ -131,7 +202,8 @@ impl Calldata {
         println!("Parsed Params: {:#?}", &self.parsed_params);
     }
 
-    /// Parses the initial selector the calldata is being sent to.
+    /// Parses the method selector the calldata is being sent to.
+    /// Prepares the raw calldata params to be parsed.
     pub fn parse_selector(&mut self) {
 
         // Remove prefix.
@@ -177,8 +249,8 @@ impl Calldata {
         }
     }
 
-    /// Parses the calldata for each param and it's selector.
-    pub fn parse_params(&mut self) {
+    /// Parses the raw calldata params for each param and for any new method selectors.
+    pub fn parse_raw_params(&mut self) {
         let mut i = 0;
         let mut params: (Vec<String>, bool) = (self.raw_params.clone(), false);
         let mut skipping = 0;
@@ -186,36 +258,40 @@ impl Calldata {
 
         loop {
             // println!("{} Parsed params: {:#?}", i, params.0);
-            let raw_param;
             if skipping != 0 {
                 i += skipping;
                 skipping = 0;
             }
-
+            
             if &params.0[i] == EMPTY_32 {
                 params.0 = add_padding(params.0, i, true);
                 i += 1;
             }
-
-            raw_param = &params.0[i];
+            
+            let raw_param = &params.0[i];
             let trimmed = raw_param.trim_start_matches('0').to_string();
 
             // Check if param has selector in it.
             let parsed = try_parse_selector(&raw_param);
 
-            // If selector found
+            // If selector found.
             if parsed.0 != EMPTY_4 && parsed.0 != MASK_4 {
                 // println!("selector {}", parsed.0);
+
                 // Check if last param was a length type.
-                // They usually come before functions/dynamic types - espc in multicalls.
+                // They indicate the start of a dynamic type (string, bytes, or array).
                 if let Some(last) = last_raw(&params.0, i) {
+
+                    // Trim the last param.
                     let last_trimmed = last.trim_start_matches('0').to_string();
                     if let Ok(v) = U128::from_str_radix(&last_trimmed, 16) {
+                        
                         // Extract selector + params.
                         if let Some(skip) = self.parse_len(&params.0, i, v.as_usize()) {
                             // println!("selector found");
                             let rearranged = rearrange_chunks(params.0, i, parsed.1);
                             params = (rearranged.0.clone(), true);
+
                             // How many chars we skip next loop.
                             skipping = skip;
                         }
@@ -310,57 +386,6 @@ impl Calldata {
             // params.types = types;
         }
     }
-}
-
-/// Guesses the potential types  of the parameter by checking specific patterns.
-pub fn guess_param_type(param: &str) -> ParamTypes {
-    if param == EMPTY_32 {
-        return ParamTypes::new(vec![Types::AnyZero]);
-    }
-
-    if param == MAX_U128 {
-        return ParamTypes::new(vec![Types::MaxUint128]);
-    }
-
-    let chunks = chunkify(param, 8);
-
-    // Selector detection:
-    // if: !00000000 && !FFFFFFFF && ________00000000
-    if chunks[0] != EMPTY_4 && chunks[0] != MASK_4 && chunks[1] == EMPTY_4 {
-        return ParamTypes::new(vec![Types::Selector, Types::String, Types::Bytes]);
-    }
-
-    // Check if it's an Int by: if FFFFFFFF
-    // Ints replace 0s with 1s in bitwise
-    if chunks[0] == MASK_4 {
-        // if: FFFFFFFFFFFFFFFF we can assume it's an Int
-        match chunks[1] == MASK_4 {
-            true => return ParamTypes::new(vec![Types::Int]),
-            false => return ParamTypes::new(vec![Types::Int, Types::String, Types::Bytes]),
-        }
-    }
-
-    // Check if we found an address:
-    // Todo:
-    // - Check optimised addresses.
-    let trimmed = param.trim_start_matches('0').to_string();
-    if trimmed.len() == 40 {
-        return ParamTypes::new(vec![Types::Address, Types::Bytes20, Types::Uint]);
-    }
-
-    // If the value can be converted to U256
-    if let Ok(v) = U256::from_str_radix(&param, 16) {
-        if v <= U256::one() {
-            return ParamTypes::new(vec![Types::Bool, Types::Uint8, Types::Bytes1]);
-        } else if let Ok(eight) = U256::from_dec_str("8") {
-            if v <= eight {
-                return ParamTypes::new(vec![Types::Bool, Types::Uint8, Types::Bytes1]);
-            }
-        }
-    }
-
-    // Eliminated some patterns; we can conclude it can be one of these.
-    ParamTypes::new(vec![Types::Uint, Types::Int, Types::Bytes])
 }
 
 /*
