@@ -1,5 +1,6 @@
 pub mod constants;
 pub mod type_guesser;
+pub mod tests;
 
 use constants::*;
 use ethers::types::{U128, U256};
@@ -170,11 +171,20 @@ pub fn guess_param_type(param: &str) -> ParamTypes {
 
 #[derive(Clone, Debug)]
 pub struct Calldata {
+    /// Raw calldata being assessed.
     pub calldata: String,
+    /// Method selector being targeted.
     pub selector: String,
+    /// TODO...IMPLEMENT.
+    /// The types of each parameter in the initial method being called (`selector`).
+    pub main_parsed: Vec<Params>,
+    /// The params found after selector is sliced out.
     raw_params: Vec<String>,
+
+    /// 
     params: Vec<String>,
     /// Method calls extending from our method.
+    /// Includes potential types guessed.
     parsed_params: Vec<Params>,
 }
 
@@ -183,6 +193,7 @@ impl Calldata {
         let mut s = Self {
             calldata: calldata.to_string(),
             selector: String::new(),
+            main_parsed: vec![],
             raw_params: vec![],
             params: vec![],
             parsed_params: vec![],
@@ -254,7 +265,15 @@ impl Calldata {
         let mut i = 0;
         let mut params: (Vec<String>, bool) = (self.raw_params.clone(), false);
         let mut skipping = 0;
-        let mut offsets: Vec<(usize, U128, bool)> = vec![]; // pc of offset + offset
+
+
+        // TODO...CREATE OFFSET STRUCT
+        // TODO...CREATE PC counter/offset identifier for when we reach it to set length
+        // ...
+        // - PC of offset (e.g.2nd param)
+        // - Offset value (e.g. 0x40)
+        // - Length       (e.g. 0x02); Default 0 until we reach the offset
+        let mut offsets: Vec<(usize, U128, usize)> = vec![]; // pc of offset + offset
 
         loop {
             // println!("{} Parsed params: {:#?}", i, params.0);
@@ -308,7 +327,7 @@ impl Calldata {
                     // - below safety net length, since they probably wont go that high. 
                     // - divisible by 32 bytes (0x20).
                     if v < U128::from(i * 64 + 1920) && v % 64 == U128::from(0) {
-                        offsets.push((i, v / 64, false));
+                        offsets.push((i, v / 64, 0));
                     }
                 }
             }

@@ -3,6 +3,8 @@
         "chunkify",
         "espc",
         "multicalls",
-        "optimised"
+        "nocapture",
+        "optimised",
+        "struct"
     ]
 }
