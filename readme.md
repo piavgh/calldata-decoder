@@ -48,13 +48,6 @@ For `0x60` at `0x40`:
 
 Then we need to create a test for this ^
 
-## value | slot
-
-0xe5 | 0x20
-0x60 | 0x40
-0x01 | 0x60
-0x02 | 0x80
-
 ## Contributing
 
 This repo can be expanded to become much more sophisticated. There are some core features missing.
