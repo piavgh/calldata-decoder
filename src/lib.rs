@@ -176,16 +176,16 @@ pub struct Calldata {
     /// Method selector being targeted.
     pub selector: String,
     /// TODO...IMPLEMENT.
+    /// These aren't computed with `nested_details`
     /// The types of each parameter in the initial method being called (`selector`).
-    pub main_parsed: Vec<Params>,
+    pub main_details: Vec<Params>,
     /// The params found after selector is sliced out.
     raw_params: Vec<String>,
-
     /// 
     params: Vec<String>,
     /// Method calls extending from our method.
     /// Includes potential types guessed.
-    parsed_params: Vec<Params>,
+    nested_details: Vec<Params>,
 }
 
 impl Calldata {
@@ -193,10 +193,10 @@ impl Calldata {
         let mut s = Self {
             calldata: calldata.to_string(),
             selector: String::new(),
-            main_parsed: vec![],
+            main_details: vec![],
             raw_params: vec![],
             params: vec![],
-            parsed_params: vec![],
+            nested_details: vec![],
         };
         s.parse_selector();
         s.parse_raw_params();
@@ -210,7 +210,7 @@ impl Calldata {
         println!("Method ID: {}", &self.selector);
         println!("Raw Params {:#?}", &self.raw_params);
         println!("Params: {:#?}", &self.params);
-        println!("Parsed Params: {:#?}", &self.parsed_params);
+        println!("Parsed Params: {:#?}", &self.nested_details);
     }
 
     /// Parses the method selector the calldata is being sent to.
@@ -356,7 +356,7 @@ impl Calldata {
             let new_params = chunkify(cut.1, 64);
 
             // Record params.
-            self.parsed_params.push(Params::new(cut.0, new_params));
+            self.nested_details.push(Params::new(cut.0, new_params));
 
             // If extracting only function.
             if len == 4 {
@@ -382,8 +382,8 @@ impl Calldata {
         println!("guess param types");
 
         // If our main method calls other methods:
-        if self.parsed_params.len() > 0 {
-            for params in self.parsed_params.iter_mut() {
+        if self.nested_details.len() > 0 {
+            for params in self.nested_details.iter_mut() {
                 let mut types: Vec<ParamTypes> = vec![];
 
                 for param in params.params.iter() {
