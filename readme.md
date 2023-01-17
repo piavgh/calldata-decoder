@@ -2,6 +2,8 @@
 
 A program to automate raw calldata decoding, discussed in [DeGatchi](https://twitter.com/DeGatchi)'s article, [Reverse The EVM: Raw Calldata](https://degatchi.com/articles/reading-raw-evm-calldata).
 
+---
+
 ## Features
 
 - [x] Selector detector
@@ -11,6 +13,8 @@ A program to automate raw calldata decoding, discussed in [DeGatchi](https://twi
   - [ ] For main body
   - [x] Nested (multicall)
   - [ ] Optimised address detector
+
+---
 
 ## Todo
 
@@ -47,6 +51,8 @@ For `0x60` at `0x40`:
 4. Is there any more params after?
 
 Then we need to create a test for this ^
+
+---
 
 ## Contributing
 
