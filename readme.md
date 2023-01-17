@@ -1,6 +1,6 @@
 # Calldata Decoder
 
-A program to automate raw calldata decoding, discussed in [DeGatchi](https://twitter.com/DeGatchi)'s article, [Reverse The EVM: Raw Calldata](https://degatchi.com/articles/reading-raw-evm-calldata).
+A program to automate raw calldata decoding using *only* the calldata, discussed in [DeGatchi](https://twitter.com/DeGatchi)'s article, [Reverse The EVM: Raw Calldata](https://degatchi.com/articles/reading-raw-evm-calldata).
 
 ![Calldata Decoder Thumbnail](images/auto_raw_calldata.png)
 
